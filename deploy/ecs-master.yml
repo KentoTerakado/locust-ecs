@@ -1,0 +1,4 @@
+cluster: locust
+service: locust-master
+region: ap-northeast-1
+timeout: 5m
