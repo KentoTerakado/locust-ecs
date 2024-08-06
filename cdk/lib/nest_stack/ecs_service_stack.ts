@@ -8,6 +8,7 @@ import { aws_iam as iam } from 'aws-cdk-lib';
 import { aws_logs as logs } from 'aws-cdk-lib';
 import { aws_ecr as ecr } from 'aws-cdk-lib';
 import { aws_servicediscovery as servicediscovery } from 'aws-cdk-lib';
+import { aws_wafv2 as wafv2 } from 'aws-cdk-lib';
 import { Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 
@@ -30,6 +31,7 @@ export class ECSServiceStack extends cdk.Stack {
       logGroup: logs.LogGroup,
       repository: ecr.IRepository,
       namespace: servicediscovery.PrivateDnsNamespace;
+      wafacl: wafv2.CfnWebACL
       type: string,
     }
   ) {
@@ -91,18 +93,23 @@ export class ECSServiceStack extends cdk.Stack {
     });
 
     if ( inputs.type === 'master' ) {
-      this.CreateALB(inputs.vpc, ecsService, inputs.alb_sg);
+      this.CreateALB(inputs.vpc, ecsService, inputs.alb_sg, inputs.wafacl);
     }
     if ( inputs.type == 'slave' ) {
       this.ScalingPolicy(ecsService);
     }
   }
 
-  private CreateALB(vpc: ec2.IVpc, ecsService: ecs.FargateService, alb_sg: ec2.ISecurityGroup) {
+  private CreateALB(vpc: ec2.IVpc, ecsService: ecs.FargateService, alb_sg: ec2.ISecurityGroup, wafacl: wafv2.CfnWebACL) {
     const alb = new elbv2.ApplicationLoadBalancer(this, 'LocustALB', {
       vpc,
       internetFacing: true,
       securityGroup: alb_sg,
+    });
+
+    new wafv2.CfnWebACLAssociation(this, 'WafAssociation', {
+      resourceArn: alb.loadBalancerArn,
+      webAclArn: wafacl.attrArn,
     });
 
     const listener = alb.addListener('HttpListener', {
@@ -123,7 +130,7 @@ export class ECSServiceStack extends cdk.Stack {
   private ScalingPolicy(ecsService: ecs.FargateService) {
     const autoScale = ecsService.autoScaleTaskCount({
       minCapacity: 0,
-      maxCapacity: 10,
+      maxCapacity: 0,
     });
     autoScale.scaleOnCpuUtilization('CpuUtilizationScalingPolicy', {
       targetUtilizationPercent: 50,

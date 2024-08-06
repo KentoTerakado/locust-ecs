@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import { IAMRoleStack } from './nest_stack/iam_role_stack';
 import { VPCStack } from './nest_stack/vpc_stack';
 import { ECSClusterStack } from './nest_stack/ecs_cluster_stack';
+import { WafStack } from './nest_stack/waf_stack';
 import { ECSServiceStack } from './nest_stack/ecs_service_stack';
 
 export class LocustStack extends cdk.Stack {
@@ -10,6 +11,7 @@ export class LocustStack extends cdk.Stack {
   public readonly iam: IAMRoleStack;
   public readonly ecscluster: ECSClusterStack;
   public readonly ecsServiceStack: ECSServiceStack;
+  public readonly wafacl: WafStack;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -21,6 +23,11 @@ export class LocustStack extends cdk.Stack {
 
     this.vpc = new VPCStack(this, 'VPCStack', {
       stackName: `locust-vpc-stack`,
+      ...props,
+    });
+
+    this.wafacl = new WafStack(this, 'WafStack', {
+      stackName: `locust-waf-stack`,
       ...props,
     });
 
@@ -43,9 +50,11 @@ export class LocustStack extends cdk.Stack {
       logGroup: this.ecscluster.logGroup,
       repository: this.ecscluster.repository,
       namespace: this.ecscluster.namespace,
+      wafacl: this.wafacl.wafacl,
       type: 'master',
     });
     this.ecsServiceStack.node.addDependency(this.ecscluster);
+    this.ecsServiceStack.node.addDependency(this.wafacl);
 
     const ecsServiceStackSlave = new ECSServiceStack(this, 'ECSServiceStackSlave', {
       stackName: 'locust-service-stack-slave',
@@ -60,6 +69,7 @@ export class LocustStack extends cdk.Stack {
       logGroup: this.ecscluster.logGroup,
       repository: this.ecscluster.repository,
       namespace: this.ecscluster.namespace,
+      wafacl: this.wafacl.wafacl,
       type: 'slave',
     }).node.addDependency(this.ecscluster);
   }
